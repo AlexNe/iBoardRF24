@@ -16,4 +16,6 @@ Please refer to:
 * [Downloads](https://github.com/andykarpov/iBoardRF24/archives/master)
 * [Chip Datasheet](http://www.nordicsemi.com/files/Product/data_sheet/nRF24L01_Product_Specification_v2_0.pdf)
 
+Please note, this library uses some external libraries, at least digitalWriteFast:
+* [digitalWriteFast Source Code](http://code.google.com/p/digitalwritefast/)
 
