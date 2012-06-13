@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2011 J. Coliz <maniacbug@ymail.com>
+ Copyright (C) 2012 Andrey Karpov <andy.karpov@gmail.com>
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -8,41 +9,52 @@
 
 #include "nRF24L01.h"
 #include "RF24_config.h"
-#include "RF24.h"
+#include "iBoardRF24.h"
+#include "digitalWriteFast.h"
+
 
 /****************************************************************************/
 
-void RF24::csn(int mode)
+void iBoardRF24::csn(int mode)
 {
-  // Minimum ideal SPI bus speed is 2x data rate
-  // If we assume 2Mbs data rate and 16Mhz clock, a
-  // divider of 4 is the minimum we want.
-  // CLK:BUS 8Mhz:2Mhz, 16Mhz:4Mhz, or 20Mhz:5Mhz
-#ifdef ARDUINO
-  SPI.setBitOrder(MSBFIRST);
-  SPI.setDataMode(SPI_MODE0);
-  SPI.setClockDivider(SPI_CLOCK_DIV4);
-#endif
-  digitalWrite(csn_pin,mode);
+  digitalWriteFast2(csn_pin,mode);
 }
 
 /****************************************************************************/
 
-void RF24::ce(int level)
+void iBoardRF24::ce(int level)
 {
-  digitalWrite(ce_pin,level);
+  digitalWriteFast2(ce_pin,level);
+}
+
+unsigned char iBoardRF24::SPI_RW(unsigned char byte) {
+	unsigned char i;
+	for(i=0;i<8;i++) {
+		if(byte&0x80) {
+			digitalWriteFast2(mosi_pin, 1);
+		} else {
+			digitalWriteFast2(mosi_pin, 0);
+		}
+		digitalWriteFast2(sck_pin, 1);
+		byte <<= 1;
+		if(digitalReadFast2(miso_pin) == 1) {
+			byte |= 1;
+		}
+		digitalWriteFast2(sck_pin, 0); 
+	}
+	return (byte);
 }
 
 /****************************************************************************/
 
-uint8_t RF24::read_register(uint8_t reg, uint8_t* buf, uint8_t len)
+uint8_t iBoardRF24::read_register(uint8_t reg, uint8_t* buf, uint8_t len)
 {
   uint8_t status;
 
   csn(LOW);
-  status = SPI.transfer( R_REGISTER | ( REGISTER_MASK & reg ) );
+  status = SPI_RW( R_REGISTER | ( REGISTER_MASK & reg ) );
   while ( len-- )
-    *buf++ = SPI.transfer(0xff);
+    *buf++ = SPI_RW(0xff);
 
   csn(HIGH);
 
@@ -51,11 +63,11 @@ uint8_t RF24::read_register(uint8_t reg, uint8_t* buf, uint8_t len)
 
 /****************************************************************************/
 
-uint8_t RF24::read_register(uint8_t reg)
+uint8_t iBoardRF24::read_register(uint8_t reg)
 {
   csn(LOW);
-  SPI.transfer( R_REGISTER | ( REGISTER_MASK & reg ) );
-  uint8_t result = SPI.transfer(0xff);
+  SPI_RW( R_REGISTER | ( REGISTER_MASK & reg ) );
+  uint8_t result = SPI_RW(0xff);
 
   csn(HIGH);
   return result;
@@ -63,14 +75,14 @@ uint8_t RF24::read_register(uint8_t reg)
 
 /****************************************************************************/
 
-uint8_t RF24::write_register(uint8_t reg, const uint8_t* buf, uint8_t len)
+uint8_t iBoardRF24::write_register(uint8_t reg, const uint8_t* buf, uint8_t len)
 {
   uint8_t status;
 
   csn(LOW);
-  status = SPI.transfer( W_REGISTER | ( REGISTER_MASK & reg ) );
+  status = SPI_RW( W_REGISTER | ( REGISTER_MASK & reg ) );
   while ( len-- )
-    SPI.transfer(*buf++);
+    SPI_RW(*buf++);
 
   csn(HIGH);
 
@@ -79,15 +91,13 @@ uint8_t RF24::write_register(uint8_t reg, const uint8_t* buf, uint8_t len)
 
 /****************************************************************************/
 
-uint8_t RF24::write_register(uint8_t reg, uint8_t value)
+uint8_t iBoardRF24::write_register(uint8_t reg, uint8_t value)
 {
   uint8_t status;
 
-  IF_SERIAL_DEBUG(printf_P(PSTR("write_register(%02x,%02x)\r\n"),reg,value));
-
   csn(LOW);
-  status = SPI.transfer( W_REGISTER | ( REGISTER_MASK & reg ) );
-  SPI.transfer(value);
+  status = SPI_RW( W_REGISTER | ( REGISTER_MASK & reg ) );
+  SPI_RW(value);
   csn(HIGH);
 
   return status;
@@ -95,7 +105,7 @@ uint8_t RF24::write_register(uint8_t reg, uint8_t value)
 
 /****************************************************************************/
 
-uint8_t RF24::write_payload(const void* buf, uint8_t len)
+uint8_t iBoardRF24::write_payload(const void* buf, uint8_t len)
 {
   uint8_t status;
 
@@ -107,11 +117,11 @@ uint8_t RF24::write_payload(const void* buf, uint8_t len)
   //printf("[Writing %u bytes %u blanks]",data_len,blank_len);
   
   csn(LOW);
-  status = SPI.transfer( W_TX_PAYLOAD );
+  status = SPI_RW( W_TX_PAYLOAD );
   while ( data_len-- )
-    SPI.transfer(*current++);
+    SPI_RW(*current++);
   while ( blank_len-- )
-    SPI.transfer(0);
+    SPI_RW(0);
   csn(HIGH);
 
   return status;
@@ -119,7 +129,7 @@ uint8_t RF24::write_payload(const void* buf, uint8_t len)
 
 /****************************************************************************/
 
-uint8_t RF24::read_payload(void* buf, uint8_t len)
+uint8_t iBoardRF24::read_payload(void* buf, uint8_t len)
 {
   uint8_t status;
   uint8_t* current = reinterpret_cast<uint8_t*>(buf);
@@ -130,11 +140,11 @@ uint8_t RF24::read_payload(void* buf, uint8_t len)
   //printf("[Reading %u bytes %u blanks]",data_len,blank_len);
   
   csn(LOW);
-  status = SPI.transfer( R_RX_PAYLOAD );
+  status = SPI_RW( R_RX_PAYLOAD );
   while ( data_len-- )
-    *current++ = SPI.transfer(0xff);
+    *current++ = SPI_RW(0xff);
   while ( blank_len-- )
-    SPI.transfer(0xff);
+    SPI_RW(0xff);
   csn(HIGH);
 
   return status;
@@ -142,12 +152,12 @@ uint8_t RF24::read_payload(void* buf, uint8_t len)
 
 /****************************************************************************/
 
-uint8_t RF24::flush_rx(void)
+uint8_t iBoardRF24::flush_rx(void)
 {
   uint8_t status;
 
   csn(LOW);
-  status = SPI.transfer( FLUSH_RX );
+  status = SPI_RW( FLUSH_RX );
   csn(HIGH);
 
   return status;
@@ -155,12 +165,12 @@ uint8_t RF24::flush_rx(void)
 
 /****************************************************************************/
 
-uint8_t RF24::flush_tx(void)
+uint8_t iBoardRF24::flush_tx(void)
 {
   uint8_t status;
 
   csn(LOW);
-  status = SPI.transfer( FLUSH_TX );
+  status = SPI_RW( FLUSH_TX );
   csn(HIGH);
 
   return status;
@@ -168,12 +178,12 @@ uint8_t RF24::flush_tx(void)
 
 /****************************************************************************/
 
-uint8_t RF24::get_status(void)
+uint8_t iBoardRF24::get_status(void)
 {
   uint8_t status;
 
   csn(LOW);
-  status = SPI.transfer( NOP );
+  status = SPI_RW( NOP );
   csn(HIGH);
 
   return status;
@@ -181,7 +191,7 @@ uint8_t RF24::get_status(void)
 
 /****************************************************************************/
 
-void RF24::print_status(uint8_t status)
+void iBoardRF24::print_status(uint8_t status)
 {
   printf_P(PSTR("STATUS\t\t = 0x%02x RX_DR=%x TX_DS=%x MAX_RT=%x RX_P_NO=%x TX_FULL=%x\r\n"),
            status,
@@ -195,7 +205,7 @@ void RF24::print_status(uint8_t status)
 
 /****************************************************************************/
 
-void RF24::print_observe_tx(uint8_t value)
+void iBoardRF24::print_observe_tx(uint8_t value)
 {
   printf_P(PSTR("OBSERVE_TX=%02x: POLS_CNT=%x ARC_CNT=%x\r\n"),
            value,
@@ -206,7 +216,7 @@ void RF24::print_observe_tx(uint8_t value)
 
 /****************************************************************************/
 
-void RF24::print_byte_register(const char* name, uint8_t reg, uint8_t qty)
+void iBoardRF24::print_byte_register(const char* name, uint8_t reg, uint8_t qty)
 {
   char extra_tab = strlen_P(name) < 8 ? '\t' : 0;
   printf_P(PSTR(PRIPSTR"\t%c ="),name,extra_tab);
@@ -217,7 +227,7 @@ void RF24::print_byte_register(const char* name, uint8_t reg, uint8_t qty)
 
 /****************************************************************************/
 
-void RF24::print_address_register(const char* name, uint8_t reg, uint8_t qty)
+void iBoardRF24::print_address_register(const char* name, uint8_t reg, uint8_t qty)
 {
   char extra_tab = strlen_P(name) < 8 ? '\t' : 0;
   printf_P(PSTR(PRIPSTR"\t%c ="),name,extra_tab);
@@ -238,16 +248,16 @@ void RF24::print_address_register(const char* name, uint8_t reg, uint8_t qty)
 
 /****************************************************************************/
 
-RF24::RF24(uint8_t _cepin, uint8_t _cspin):
-  ce_pin(_cepin), csn_pin(_cspin), wide_band(true), p_variant(false), 
-  payload_size(32), ack_payload_available(false), dynamic_payloads_enabled(false),
-  pipe0_reading_address(0)
+iBoardRF24::iBoardRF24(uint8_t _cepin, uint8_t _cspin, uint8_t _mosi_pin, uint8_t _miso_pin, uint8_t _sck_pin, uint8_t _irq_pin):
+  ce_pin(_cepin), csn_pin(_cspin), mosi_pin(_mosi_pin), miso_pin(_miso_pin), sck_pin(_sck_pin), irq_pin(_irq_pin),
+  wide_band(true), p_variant(false), payload_size(32), ack_payload_available(false), 
+  dynamic_payloads_enabled(false), pipe0_reading_address(0)
 {
 }
 
 /****************************************************************************/
 
-void RF24::setChannel(uint8_t channel)
+void iBoardRF24::setChannel(uint8_t channel)
 {
   // TODO: This method could take advantage of the 'wide_band' calculation
   // done in setChannel() to require certain channel spacing.
@@ -258,7 +268,7 @@ void RF24::setChannel(uint8_t channel)
 
 /****************************************************************************/
 
-void RF24::setPayloadSize(uint8_t size)
+void iBoardRF24::setPayloadSize(uint8_t size)
 {
   const uint8_t max_payload_size = 32;
   payload_size = min(size,max_payload_size);
@@ -266,7 +276,7 @@ void RF24::setPayloadSize(uint8_t size)
 
 /****************************************************************************/
 
-uint8_t RF24::getPayloadSize(void)
+uint8_t iBoardRF24::getPayloadSize(void)
 {
   return payload_size;
 }
@@ -306,7 +316,7 @@ static const char * const rf24_pa_dbm_e_str_P[] PROGMEM = {
   rf24_pa_dbm_e_str_3,
 };
 
-void RF24::printDetails(void)
+void iBoardRF24::printDetails(void)
 {
   print_status(get_status());
 
@@ -330,14 +340,18 @@ void RF24::printDetails(void)
 
 /****************************************************************************/
 
-void RF24::begin(void)
+void iBoardRF24::begin(void)
 {
   // Initialize pins
   pinMode(ce_pin,OUTPUT);
   pinMode(csn_pin,OUTPUT);
 
-  // Initialize SPI bus
-  SPI.begin();
+  pinMode(miso_pin, INPUT);
+  pinMode(irq_pin, INPUT);
+  pinMode(mosi_pin, OUTPUT);
+  pinMode(sck_pin, OUTPUT);
+
+//  attachInterrupt(1, _ISR, LOW);
 
   ce(LOW);
   csn(HIGH);
@@ -369,7 +383,7 @@ void RF24::begin(void)
   
   // Then set the data rate to the slowest (and most reliable) speed supported by all
   // hardware.
-  setDataRate( RF24_1MBPS ) ;
+  //setDataRate( RF24_1MBPS ) ;
 
   // Initialize CRC and request 2-byte (16bit) CRC
   setCRCLength( RF24_CRC_16 ) ;
@@ -393,7 +407,7 @@ void RF24::begin(void)
 
 /****************************************************************************/
 
-void RF24::startListening(void)
+void iBoardRF24::startListening(void)
 {
   write_register(CONFIG, read_register(CONFIG) | _BV(PWR_UP) | _BV(PRIM_RX));
   write_register(STATUS, _BV(RX_DR) | _BV(TX_DS) | _BV(MAX_RT) );
@@ -415,7 +429,7 @@ void RF24::startListening(void)
 
 /****************************************************************************/
 
-void RF24::stopListening(void)
+void iBoardRF24::stopListening(void)
 {
   ce(LOW);
   flush_tx();
@@ -424,21 +438,21 @@ void RF24::stopListening(void)
 
 /****************************************************************************/
 
-void RF24::powerDown(void)
+void iBoardRF24::powerDown(void)
 {
   write_register(CONFIG,read_register(CONFIG) & ~_BV(PWR_UP));
 }
 
 /****************************************************************************/
 
-void RF24::powerUp(void)
+void iBoardRF24::powerUp(void)
 {
   write_register(CONFIG,read_register(CONFIG) | _BV(PWR_UP));
 }
 
 /******************************************************************/
 
-bool RF24::write( const void* buf, uint8_t len )
+bool iBoardRF24::write( const void* buf, uint8_t len )
 {
   bool result = false;
 
@@ -504,7 +518,7 @@ bool RF24::write( const void* buf, uint8_t len )
 }
 /****************************************************************************/
 
-void RF24::startWrite( const void* buf, uint8_t len )
+void iBoardRF24::startWrite( const void* buf, uint8_t len )
 {
   // Transmitter power-up
   write_register(CONFIG, ( read_register(CONFIG) | _BV(PWR_UP) ) & ~_BV(PRIM_RX) );
@@ -521,13 +535,13 @@ void RF24::startWrite( const void* buf, uint8_t len )
 
 /****************************************************************************/
 
-uint8_t RF24::getDynamicPayloadSize(void)
+uint8_t iBoardRF24::getDynamicPayloadSize(void)
 {
   uint8_t result = 0;
 
   csn(LOW);
-  SPI.transfer( R_RX_PL_WID );
-  result = SPI.transfer(0xff);
+  SPI_RW( R_RX_PL_WID );
+  result = SPI_RW(0xff);
   csn(HIGH);
 
   return result;
@@ -535,14 +549,14 @@ uint8_t RF24::getDynamicPayloadSize(void)
 
 /****************************************************************************/
 
-bool RF24::available(void)
+bool iBoardRF24::available(void)
 {
   return available(NULL);
 }
 
 /****************************************************************************/
 
-bool RF24::available(uint8_t* pipe_num)
+bool iBoardRF24::available(uint8_t* pipe_num)
 {
   uint8_t status = get_status();
 
@@ -576,7 +590,7 @@ bool RF24::available(uint8_t* pipe_num)
 
 /****************************************************************************/
 
-bool RF24::read( void* buf, uint8_t len )
+bool iBoardRF24::read( void* buf, uint8_t len )
 {
   // Fetch the payload
   read_payload( buf, len );
@@ -587,7 +601,7 @@ bool RF24::read( void* buf, uint8_t len )
 
 /****************************************************************************/
 
-void RF24::whatHappened(bool& tx_ok,bool& tx_fail,bool& rx_ready)
+void iBoardRF24::whatHappened(bool& tx_ok,bool& tx_fail,bool& rx_ready)
 {
   // Read the status & reset the status in one easy call
   // Or is that such a good idea?
@@ -601,7 +615,7 @@ void RF24::whatHappened(bool& tx_ok,bool& tx_fail,bool& rx_ready)
 
 /****************************************************************************/
 
-void RF24::openWritingPipe(uint64_t value)
+void iBoardRF24::openWritingPipe(uint64_t value)
 {
   // Note that AVR 8-bit uC's store this LSB first, and the NRF24L01(+)
   // expects it LSB first too, so we're good.
@@ -628,7 +642,7 @@ static const uint8_t child_pipe_enable[] PROGMEM =
   ERX_P0, ERX_P1, ERX_P2, ERX_P3, ERX_P4, ERX_P5
 };
 
-void RF24::openReadingPipe(uint8_t child, uint64_t address)
+void iBoardRF24::openReadingPipe(uint8_t child, uint64_t address)
 {
   // If this is pipe 0, cache the address.  This is needed because
   // openWritingPipe() will overwrite the pipe 0 address, so
@@ -655,17 +669,17 @@ void RF24::openReadingPipe(uint8_t child, uint64_t address)
 
 /****************************************************************************/
 
-void RF24::toggle_features(void)
+void iBoardRF24::toggle_features(void)
 {
   csn(LOW);
-  SPI.transfer( ACTIVATE );
-  SPI.transfer( 0x73 );
+  SPI_RW( ACTIVATE );
+  SPI_RW( 0x73 );
   csn(HIGH);
 }
 
 /****************************************************************************/
 
-void RF24::enableDynamicPayloads(void)
+void iBoardRF24::enableDynamicPayloads(void)
 {
   // Enable dynamic payload throughout the system
   write_register(FEATURE,read_register(FEATURE) | _BV(EN_DPL) );
@@ -691,7 +705,7 @@ void RF24::enableDynamicPayloads(void)
 
 /****************************************************************************/
 
-void RF24::enableAckPayload(void)
+void iBoardRF24::enableAckPayload(void)
 {
   //
   // enable ack payload and dynamic payload features
@@ -718,23 +732,23 @@ void RF24::enableAckPayload(void)
 
 /****************************************************************************/
 
-void RF24::writeAckPayload(uint8_t pipe, const void* buf, uint8_t len)
+void iBoardRF24::writeAckPayload(uint8_t pipe, const void* buf, uint8_t len)
 {
   const uint8_t* current = reinterpret_cast<const uint8_t*>(buf);
 
   csn(LOW);
-  SPI.transfer( W_ACK_PAYLOAD | ( pipe & B111 ) );
+  SPI_RW( W_ACK_PAYLOAD | ( pipe & B111 ) );
   const uint8_t max_payload_size = 32;
   uint8_t data_len = min(len,max_payload_size);
   while ( data_len-- )
-    SPI.transfer(*current++);
+    SPI_RW(*current++);
 
   csn(HIGH);
 }
 
 /****************************************************************************/
 
-bool RF24::isAckPayloadAvailable(void)
+bool iBoardRF24::isAckPayloadAvailable(void)
 {
   bool result = ack_payload_available;
   ack_payload_available = false;
@@ -743,14 +757,14 @@ bool RF24::isAckPayloadAvailable(void)
 
 /****************************************************************************/
 
-bool RF24::isPVariant(void)
+bool iBoardRF24::isPVariant(void)
 {
   return p_variant ;
 }
 
 /****************************************************************************/
 
-void RF24::setAutoAck(bool enable)
+void iBoardRF24::setAutoAck(bool enable)
 {
   if ( enable )
     write_register(EN_AA, B111111);
@@ -760,7 +774,7 @@ void RF24::setAutoAck(bool enable)
 
 /****************************************************************************/
 
-void RF24::setAutoAck( uint8_t pipe, bool enable )
+void iBoardRF24::setAutoAck( uint8_t pipe, bool enable )
 {
   if ( pipe <= 6 )
   {
@@ -779,21 +793,21 @@ void RF24::setAutoAck( uint8_t pipe, bool enable )
 
 /****************************************************************************/
 
-bool RF24::testCarrier(void)
+bool iBoardRF24::testCarrier(void)
 {
   return ( read_register(CD) & 1 );
 }
 
 /****************************************************************************/
 
-bool RF24::testRPD(void)
+bool iBoardRF24::testRPD(void)
 {
   return ( read_register(RPD) & 1 ) ;
 }
 
 /****************************************************************************/
 
-void RF24::setPALevel(rf24_pa_dbm_e level)
+void iBoardRF24::setPALevel(rf24_pa_dbm_e level)
 {
   uint8_t setup = read_register(RF_SETUP) ;
   setup &= ~(_BV(RF_PWR_LOW) | _BV(RF_PWR_HIGH)) ;
@@ -826,7 +840,7 @@ void RF24::setPALevel(rf24_pa_dbm_e level)
 
 /****************************************************************************/
 
-rf24_pa_dbm_e RF24::getPALevel(void)
+rf24_pa_dbm_e iBoardRF24::getPALevel(void)
 {
   rf24_pa_dbm_e result = RF24_PA_ERROR ;
   uint8_t power = read_register(RF_SETUP) & (_BV(RF_PWR_LOW) | _BV(RF_PWR_HIGH)) ;
@@ -854,7 +868,7 @@ rf24_pa_dbm_e RF24::getPALevel(void)
 
 /****************************************************************************/
 
-bool RF24::setDataRate(rf24_datarate_e speed)
+bool iBoardRF24::setDataRate(rf24_datarate_e speed)
 {
   bool result = false;
   uint8_t setup = read_register(RF_SETUP) ;
@@ -901,7 +915,7 @@ bool RF24::setDataRate(rf24_datarate_e speed)
 
 /****************************************************************************/
 
-rf24_datarate_e RF24::getDataRate( void )
+rf24_datarate_e iBoardRF24::getDataRate( void )
 {
   rf24_datarate_e result ;
   uint8_t dr = read_register(RF_SETUP) & (_BV(RF_DR_LOW) | _BV(RF_DR_HIGH));
@@ -928,7 +942,7 @@ rf24_datarate_e RF24::getDataRate( void )
 
 /****************************************************************************/
 
-void RF24::setCRCLength(rf24_crclength_e length)
+void iBoardRF24::setCRCLength(rf24_crclength_e length)
 {
   uint8_t config = read_register(CONFIG) & ~( _BV(CRCO) | _BV(EN_CRC)) ;
   
@@ -951,7 +965,7 @@ void RF24::setCRCLength(rf24_crclength_e length)
 
 /****************************************************************************/
 
-rf24_crclength_e RF24::getCRCLength(void)
+rf24_crclength_e iBoardRF24::getCRCLength(void)
 {
   rf24_crclength_e result = RF24_CRC_DISABLED;
   uint8_t config = read_register(CONFIG) & ( _BV(CRCO) | _BV(EN_CRC)) ;
@@ -969,14 +983,14 @@ rf24_crclength_e RF24::getCRCLength(void)
 
 /****************************************************************************/
 
-void RF24::disableCRC( void )
+void iBoardRF24::disableCRC( void )
 {
   uint8_t disable = read_register(CONFIG) & ~_BV(EN_CRC) ;
   write_register( CONFIG, disable ) ;
 }
 
 /****************************************************************************/
-void RF24::setRetries(uint8_t delay, uint8_t count)
+void iBoardRF24::setRetries(uint8_t delay, uint8_t count)
 {
  write_register(SETUP_RETR,(delay&0xf)<<ARD | (count&0xf)<<ARC);
 }

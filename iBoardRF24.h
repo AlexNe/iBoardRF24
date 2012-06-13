@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2011 J. Coliz <maniacbug@ymail.com>
+ Copyright (C) 2012 Andy Karpov <andy@gmail.com>
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -7,13 +8,13 @@
  */
 
 /**
- * @file RF24.h
+ * @file iBoardRF24.h
  *
- * Class declaration for RF24 and helper enums
+ * Class declaration for iBoardRF24
  */
 
-#ifndef __RF24_H__
-#define __RF24_H__
+#ifndef __IBOARD_RF24_H__
+#define __IBOARD_RF24_H__
 
 #include <RF24_config.h>
 
@@ -42,18 +43,22 @@ typedef enum { RF24_CRC_DISABLED = 0, RF24_CRC_8, RF24_CRC_16 } rf24_crclength_e
  * Driver for nRF24L01(+) 2.4GHz Wireless Transceiver
  */
 
-class RF24
+class iBoardRF24
 {
 private:
-  uint8_t ce_pin; /**< "Chip Enable" pin, activates the RX or TX role */
-  uint8_t csn_pin; /**< SPI Chip select */
-  bool wide_band; /* 2Mbs data rate in use? */
-  bool p_variant; /* False for RF24L01 and true for RF24L01P */
-  uint8_t payload_size; /**< Fixed size of payloads */
-  bool ack_payload_available; /**< Whether there is an ack payload waiting */
-  bool dynamic_payloads_enabled; /**< Whether dynamic payloads are enabled. */ 
-  uint8_t ack_payload_length; /**< Dynamic size of pending ack payload. */
-  uint64_t pipe0_reading_address; /**< Last address set on pipe 0 for reading. */
+	uint8_t miso_pin;
+	uint8_t mosi_pin;
+	uint8_t sck_pin;
+	uint8_t irq_pin;
+	uint8_t ce_pin; /**< "Chip Enable" pin, activates the RX or TX role */
+    uint8_t csn_pin; /**< SPI Chip select */
+    bool wide_band; /* 2Mbs data rate in use? */
+    bool p_variant; /* False for RF24L01 and true for RF24L01P */
+    uint8_t payload_size; /**< Fixed size of payloads */
+    bool ack_payload_available; /**< Whether there is an ack payload waiting */
+    bool dynamic_payloads_enabled; /**< Whether dynamic payloads are enabled. */ 
+    uint8_t ack_payload_length; /**< Dynamic size of pending ack payload. */
+    uint64_t pipe0_reading_address; /**< Last address set on pipe 0 for reading. */
 
 protected:
   /**
@@ -84,6 +89,13 @@ protected:
    * for a much more detailed description of this pin.
    */
   void ce(int level);
+
+  /**
+   * Emulate SPI.transfer()
+   * @param byte
+   * @return unsigned char
+   */
+  unsigned char SPI_RW(unsigned char byte);
 
   /**
    * Read a chunk of data in from a register
@@ -235,7 +247,7 @@ public:
    * @param _cepin The pin attached to Chip Enable on the RF module
    * @param _cspin The pin attached to Chip Select
    */
-  RF24(uint8_t _cepin, uint8_t _cspin);
+  iBoardRF24(uint8_t _cepin, uint8_t _cspin, uint8_t _mosi_pin, uint8_t _miso_pin, uint8_t _sck_pin, uint8_t _irq_pin);
 
   /**
    * Begin operation of the chip
@@ -805,6 +817,6 @@ public:
  * <a href="http://maniacbug.wordpress.com/2011/12/14/nrf24l01-running-on-maple-3/">nRF24L01+ Running on Maple</a>
  */
 
-#endif // __RF24_H__
+#endif // __IBOARD_RF24_H__
 // vim:ai:cin:sts=2 sw=2 ft=cpp
 
