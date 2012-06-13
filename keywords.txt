@@ -1,4 +1,4 @@
-  RF24 KEYWORD1
+  iBoardRF24 KEYWORD1
   begin KEYWORD2
   setChannel KEYWORD2
   setPayloadSize KEYWORD2
