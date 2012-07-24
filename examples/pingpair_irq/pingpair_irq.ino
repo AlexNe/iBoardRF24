@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2011 J. Coliz <maniacbug@ymail.com>
+ Modified by Andy Karpov <andy.karpov@gmail.com>
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -14,21 +15,20 @@
  */
 
 #include <SPI.h>
-#include "nRF24L01.h"
-#include "RF24.h"
+#include <digitalWriteFast.h>
+#include "iBoardRF24.h"
 #include "printf.h"
 
 //
 // Hardware configuration
 //
 
-// Set up nRF24L01 radio on SPI bus plus pins 9 & 10
-
-RF24 radio(8,9);
+// Set up nRF24L01 radio on iBoard
+iBoardRF24 radio(3,8,5,6,7,2);
 
 // sets the role of this unit in hardware.  Connect to GND to be the 'pong' receiver
 // Leave open to be the 'ping' transmitter
-const short role_pin = 7;
+const short role_pin = 14; // (A0)
 
 //
 // Topology

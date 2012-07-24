@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2011 J. Coliz <maniacbug@ymail.com>
+ Modified by Andy Karpov <andy.karpov@gmail.com>
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -26,28 +27,27 @@
  */
 
 #include <SPI.h>
-#include "nRF24L01.h"
-#include "RF24.h"
+#include <digitalWriteFast.h>
+#include "iBoardRF24.h"
 #include "printf.h"
 
 //
 // Hardware configuration
 //
 
-// Set up nRF24L01 radio on SPI bus plus pins 9 & 10
-
-RF24 radio(9,10);
+// Set up nRF24L01 radio on iBoard
+iBoardRF24 radio(3,8,5,6,7,2);
 
 // sets the role of this unit in hardware.  Connect to GND to be the 'led' board receiver
 // Leave open to be the 'remote' transmitter
-const int role_pin = A4;
+const int role_pin = 14; // (A0)
 
-// Pins on the remote for buttons
-const uint8_t button_pins[] = { 2,3,4,5,6,7 };
+// Pins on the remote for buttons (A1 - A6)
+const uint8_t button_pins[] = { 15,16,17,18,19,20 };
 const uint8_t num_button_pins = sizeof(button_pins);
 
-// Pins on the LED board for LED's
-const uint8_t led_pins[] = { 2,3,4,5,6,7 };
+// Pins on the LED board for LED's (A1 - A6)
+const uint8_t led_pins[] = { 15,16,17,18,19,20 };
 const uint8_t num_led_pins = sizeof(led_pins);
 
 //

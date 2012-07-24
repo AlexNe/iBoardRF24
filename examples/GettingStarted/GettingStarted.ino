@@ -1,5 +1,6 @@
 /*
  Copyright (C) 2011 J. Coliz <maniacbug@ymail.com>
+ Modified by Andy Karpov <andy.karpov@gmail.com>
 
  This program is free software; you can redistribute it and/or
  modify it under the terms of the GNU General Public License
@@ -7,50 +8,26 @@
  */
 
 /**
- * Example RF Radio Ping Pair ... for Maple
+ * Example for Getting Started with nRF24L01+ radios. 
  *
- * This is an example of how to use the RF24 class.  Write this sketch to two different nodes,
- * connect the role_pin to ground on one.  The ping node sends the current time to the pong node,
- * which responds by sending the value back.  The ping node can then see how long the whole cycle
- * took.
+ * This is an example of how to use the RF24 class.  Write this sketch to two 
+ * different nodes.  Put one of the nodes into 'transmit' mode by connecting 
+ * with the serial monitor and sending a 'T'.  The ping node sends the current 
+ * time to the pong node, which responds by sending the value back.  The ping 
+ * node can then see how long the whole cycle took.
  */
 
-#include "WProgram.h"
 #include <SPI.h>
-#include "nRF24L01.h"
-#include "RF24.h"
-
-//
-// Maple specific setup.  Other than this section, the sketch is the same on Maple as on
-// Arduino
-//
-
-#ifdef MAPLE_IDE
-
-// External startup function
-extern void board_start(const char* program_name);
-
-// Use SPI #2.
-HardwareSPI SPI(2);
-
-#else
-#define board_startup printf
-#define toggleLED(x) (x)
-#endif
+#include <digitalWriteFast.h>
+#include "iBoardRF24.h"
+#include "printf.h"
 
 //
 // Hardware configuration
 //
 
-// Set up nRF24L01 radio on SPI bus plus pins 7 & 6
-// (This works for the Getting Started board plugged into the
-// Maple Native backwards.)
-
-RF24 radio(7,6);
-
-// sets the role of this unit in hardware.  Connect to GND to be the 'pong' receiver
-// Leave open to be the 'ping' transmitter
-const int role_pin = 10;
+// Set up nRF24L01 radio on iBoard
+iBoardRF24 radio(3,8,5,6,7,2);
 
 //
 // Topology
@@ -63,10 +40,7 @@ const uint64_t pipes[2] = { 0xF0F0F0F0E1LL, 0xF0F0F0F0D2LL };
 // Role management
 //
 // Set up role.  This sketch uses the same software for all the nodes
-// in this system.  Doing so greatly simplifies testing.  The hardware itself specifies
-// which node it is.
-//
-// This is done through the role_pin
+// in this system.  Doing so greatly simplifies testing.  
 //
 
 // The various roles supported by this sketch
@@ -76,31 +50,19 @@ typedef enum { role_ping_out = 1, role_pong_back } role_e;
 const char* role_friendly_name[] = { "invalid", "Ping out", "Pong back"};
 
 // The role of the current running sketch
-role_e role;
+role_e role = role_pong_back;
 
 void setup(void)
 {
   //
-  // Role
-  //
-
-  // set up the role pin
-  pinMode(role_pin, INPUT);
-  digitalWrite(role_pin,HIGH);
-  delay(20); // Just to get a solid reading on the role pin
-
-  // read the address pin, establish our role
-  if ( digitalRead(role_pin) )
-    role = role_ping_out;
-  else
-    role = role_pong_back;
-
-  //
   // Print preamble
   //
 
-  board_start("\n\rRF24/examples/pingpair/\n\r");
+  Serial.begin(57600);
+  printf_begin();
+  printf("\n\rRF24/examples/GettingStarted/\n\r");
   printf("ROLE: %s\n\r",role_friendly_name[role]);
+  printf("*** PRESS 'T' to begin transmitting to the other node\n\r");
 
   //
   // Setup and configure rf radio
@@ -156,8 +118,6 @@ void loop(void)
 
   if (role == role_ping_out)
   {
-    toggleLED();
-
     // First, stop listening so we can talk.
     radio.stopListening();
 
@@ -165,11 +125,11 @@ void loop(void)
     unsigned long time = millis();
     printf("Now sending %lu...",time);
     bool ok = radio.write( &time, sizeof(unsigned long) );
-
+    
     if (ok)
-      printf("ok...\r\n");
+      printf("ok...");
     else
-      printf("failed.\r\n");
+      printf("failed.\n\r");
 
     // Now, continue listening
     radio.startListening();
@@ -184,7 +144,7 @@ void loop(void)
     // Describe the results
     if ( timeout )
     {
-      printf("Failed, response timed out.\r\n");
+      printf("Failed, response timed out.\n\r");
     }
     else
     {
@@ -193,10 +153,8 @@ void loop(void)
       radio.read( &got_time, sizeof(unsigned long) );
 
       // Spew it
-      printf("Got response %lu, round-trip delay: %lu\r\n",got_time,millis()-got_time);
+      printf("Got response %lu, round-trip delay: %lu\n\r",got_time,millis()-got_time);
     }
-
-    toggleLED();
 
     // Try again 1s later
     delay(1000);
@@ -222,9 +180,9 @@ void loop(void)
         // Spew it
         printf("Got payload %lu...",got_time);
 
-        // Delay just a little bit to let the other unit
-        // make the transition to receiver
-        delay(20);
+	// Delay just a little bit to let the other unit
+	// make the transition to receiver
+	delay(20);
       }
 
       // First, stop listening so we can talk
@@ -232,10 +190,37 @@ void loop(void)
 
       // Send the final one back.
       radio.write( &got_time, sizeof(unsigned long) );
-      printf("Sent response.\r\n");
+      printf("Sent response.\n\r");
 
       // Now, resume listening so we catch the next packets.
       radio.startListening();
+    }
+  }
+
+  //
+  // Change roles
+  //
+
+  if ( Serial.available() )
+  {
+    char c = toupper(Serial.read());
+    if ( c == 'T' && role == role_pong_back )
+    {
+      printf("*** CHANGING TO TRANSMIT ROLE -- PRESS 'R' TO SWITCH BACK\n\r");
+
+      // Become the primary transmitter (ping out)
+      role = role_ping_out;
+      radio.openWritingPipe(pipes[0]);
+      radio.openReadingPipe(1,pipes[1]);
+    }
+    else if ( c == 'R' && role == role_ping_out )
+    {
+      printf("*** CHANGING TO RECEIVE ROLE -- PRESS 'T' TO SWITCH BACK\n\r");
+      
+      // Become the primary receiver (pong back)
+      role = role_pong_back;
+      radio.openWritingPipe(pipes[1]);
+      radio.openReadingPipe(1,pipes[0]);
     }
   }
 }
